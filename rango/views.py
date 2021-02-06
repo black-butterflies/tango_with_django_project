@@ -1,3 +1,4 @@
+from datetime import datetime
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect
@@ -18,13 +19,21 @@ def index(request):
     context_dict['categories'] = category_list
     context_dict['pages'] = pages_list
 
+    # obtain the response early and handle the cookies
+    visitor_cookie_handler(request)
+
+    response = render(request, 'rango/index.html', context=context_dict)
     # Return a rendered response to send to the client
-    return render(request, 'rango/index.html', context=context_dict)
+    return response
 
 
 def about(request):
+    visitor_cookie_handler(request)
 
-    return render(request, 'rango/about.html')
+    context_dict = {}
+    context_dict['visits'] = request.session['visits']
+
+    return render(request, 'rango/about.html', context=context_dict)
 
 
 def show_category(request, category_name_slug):
@@ -179,3 +188,36 @@ def restricted(request):
 def user_logout(request):
     logout(request)
     return redirect(reverse('rango:index'))
+
+
+# !HELPER FUNCTIONS
+
+def visitor_cookie_handler(request):
+    # get the number of visits to the site with the visits cookie
+    # if the cookie doesn't exist then give a default value of 1
+    visits = int(get_server_side_cookie(request, 'visits', '1'))
+
+    last_visit_cookie = get_server_side_cookie(
+        request, 'last_visit', str(datetime.now()))
+    last_visit_time = datetime.strptime(
+        last_visit_cookie[:-7], '%Y-%m-%d %H:%M:%S')
+
+    # check if it has been more than a day since the last visit
+    if (datetime.now() - last_visit_time).days > 0:
+        visits = visits + 1
+        # update the last visit cookie
+        request.session['last_visit'] = str(datetime.now())
+    else:
+        # set the last visit cookie
+        request.session['last_visit'] = last_visit_cookie
+
+    # udpate/set the visits cookie
+    request.session['visits'] = visits
+
+
+def get_server_side_cookie(request, cookie, default_val=None):
+    val = request.session.get(cookie)
+    if not val:
+        val = default_val
+
+    return val
